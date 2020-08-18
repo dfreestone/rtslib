@@ -1,0 +1,6 @@
+exportPattern("^[[:alpha:]]+")
+importFrom(Rcpp, evalCpp)
+useDynLib(rTSlib, .registration = TRUE)
+
+importFrom(magrittr,"%>%")
+importFrom(magrittr,"%<>%")

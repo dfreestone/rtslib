@@ -1,0 +1,827 @@
+\ Program title : ab_protocol.mpc
+\ Maintained by : David Freestone and Tyler Kennedy
+\ Creation Date : April, 19, 2019
+\ Last Modified : June, 4, 2019
+\
+\ Description: Jitters the goalposts, and change the reward rate
+\                   (by changing the reward probability and amount)
+
+\**********************************************************************
+\*                          CHANGE LOG                                *
+\**********************************************************************
+\
+\ The date string is in Day.Month.Year format
+\
+\   DATE     :     DESCRIPTION OF MODIFICATION
+\ -------      -----------------------------------
+\ 10.07.1995 : Original code written by RMC and JDC
+\ 25.07.1995 : Time.event format was introduced by RMC and JDC
+\ 16.08.1996 : Unspecified modification by RMC and JDC
+\ 20.07.2012 : Heavily restructured by DMF (see Notes in the header for details).
+\ 08.07.2016 : Modified for use with the mouse operant chambers from Randy Gallistel's lab
+\ 04.19.2019 : Modified for Mouse Marshmallow Task
+\
+\ RMC = Russell M. Church
+\ JDC = Jonathan Crystal
+\ DMF = David M. Freestone
+\ Student = Tyler J. Kennedy
+
+\   This template uses the following variables. Be careful when choosing variable names
+\
+\    A - Array for time coded events ( size(A) = [100000 1] )
+\    B - Total number of each event  ( size(B) = [100 1]   )
+\    D - Array that holds the datetime scalars
+\    F - Array that holds all most scalar variables
+\    J - Flag for whether we successfully read from the BKGRND CurrentParameters.txt file (and something changed)
+\    K - Flag for whether we successfully written to the BKGRND CurrentParameters.txt file
+\    O - Array that stores all parameters that are read from / written the the BKGRND file
+\    P - Array that reads the "Old_txt_Parameters" file.
+\    U - session start time
+\    W - variable to set nosepokes (size(W) = [3 1]), (Possible values for W are  {0 = head not in, 1 = head entry, 2 = head \ still in} )
+\    X - uniform random number (0-1)
+\    Y - index counts number of time-stamped events
+\    Z - Temporary array for time coded events ( size(Z) = [100000 1] )
+
+\**********************************************************************
+\*               Definition of input (from the mouse)                 *
+\**********************************************************************
+\                          ON             OFF
+^Left_Nosepoke   = 1     \ 1 (.001)       11 (.011)
+^Middle_Nosepoke = 2     \ 2 (.002)       12 (.012)
+^Right_Nosepoke  = 3     \ 3 (.003)       13 (.013)
+^Left_Pellet     = 4     \ 4 (.004)       14 (.014)
+^Middle_Pellet   = 5     \ 5 (.005)       15 (.0j0w15)
+^Right_Pellet    = 6     \ 6 (.006)       16 (.016)
+
+\**********************************************************************
+\*     Definition of output (from the experimenter)                   *
+\**********************************************************************
+\                            ON             OFF
+^Left_Feeder        = 1     \21 (.021)      31 (.031)
+^Middle_Feeder      = 2     \22 (.022)      32 (.032)
+^Right_Feeder       = 3     \23 (.023)      33 (.033)
+^Left_HopperLight   = 4     \24 (.024)      34 (.034)
+^Middle_HopperLight = 5     \25 (.025)      35 (.035)
+^Right_HopperLight  = 6     \26 (.026)      36 (.036)
+^HouseLight         = 7     \27 (.027)      37 (.037)
+^Tone               = 8     \28 (.028)      38 (.038)
+^Fan                = 9     \29 (.029)      39 (.039)
+
+\**********************************************************************
+\*                   Z pulse constants for output                     *
+\**********************************************************************
+\
+\ All of these constants use the ^ON or ^OFF addition so that all event codes become ^EventCode + ^ON (or ^OFF)
+^On_Left_Feeder        = 1
+^On_Middle_Feeder      = 2
+^On_Right_Feeder       = 3
+^On_Left_HopperLight   = 4
+^On_Middle_HopperLight = 5
+^On_Right_HopperLight  = 6
+^On_HouseLight         = 7
+^On_Tone               = 8
+^On_Fan                = 9
+
+^Off_Left_Feeder        = 11
+^Off_Middle_Feeder      = 12
+^Off_Right_Feeder       = 13
+^Off_Left_HopperLight   = 14
+^Off_Middle_HopperLight = 15
+^Off_Right_HopperLight  = 16
+^Off_HouseLight         = 17
+^Off_Tone               = 18
+^Off_Fan                = 19
+
+\ This isn't really an output, will z-pulse as 21, but written as 61
+^On_Close_Session = 21
+
+\ These are zpulses but are not written to disk
+^ShowData = 22
+^write_data = 23
+^write_variables = 24
+
+\**********************************************************************
+\*               Constants for datetime dependent events              *
+\**********************************************************************
+\ These are not z-pulsed, and are indices into D (not F)
+^On_FeedingPeriod1 = 1   \ (.041)
+^On_FeedingPeriod2 = 2
+^On_FeedingPeriod3 = 3
+^On_FeedingPeriod4 = 4
+^On_FeedingPeriod5 = 5
+^On_FeedingPeriod6 = 6
+^On_FeedingPeriod7 = 7
+^On_FeedingPeriod8 = 8  \ (.048)
+^On_Daytime = 9         \ (.049)
+^Reset_Clock = 10       \ (.050)
+
+^Off_FeedingPeriod1 = 11  \ (.051)
+^Off_FeedingPeriod2 = 12
+^Off_FeedingPeriod3 = 13
+^Off_FeedingPeriod4 = 14
+^Off_FeedingPeriod5 = 15
+^Off_FeedingPeriod6 = 16
+^Off_FeedingPeriod7 = 17
+^Off_FeedingPeriod8 = 18  \ (.058)
+^Off_Daytime = 19         \ (.059)
+
+\ Not used as event codes
+^Feeding_period = 21
+^Daystate = 22
+^Last_Daystate = 23
+^Last_secstoday = 24
+^Last_Feeding_period = 25
+^Daily_Food_Amount = 26
+^Long_Trial_Count = 27
+
+\ K pulse
+^On_weight = 1  \ (.073)
+^Off_weight = 2 \ (.074)
+
+\**********************************************************************
+\*                   Constants for writing event codes                *
+\**********************************************************************
+^input_on = 0
+^input_off = 10
+^output_on = 20
+^output_off = 30
+^Zpulse_eventcode = 40    \  (.061 - .072; z pulses 21-32)
+^Kpulse_eventcode = 72    \  (.073 - .99)  k pulses
+^Datetime_eventcode = 40  \  (.041 - .059)
+^User_eventcode = 100     \  (.100 - .999)
+^store = 1000            \ divide by ^STORE to place event code in .xxx
+
+\**********************************************************************
+\*                   Constants for writing to data file               *
+\**********************************************************************
+^Buffer = 1000        \ Size of memory flushed to disk
+
+DIM A = 1200, Z = 1200, B = 999, F = 1000, W = 10, D = 100, O = 100, P = 100
+LIST G = 1, 2, 3, 4, 5
+DISKVARS = A
+
+\**********************************************************************
+\*               Experimenter defined constants                       *
+\**********************************************************************
+\
+\ This first section (Experimenter defined constants) is the only subsection in the variable declaration section an experimenter should change.
+\
+\ In this section, the experimenter should define the constants used in the experiment.
+\ These will be things like experiment-specific event codes, and indices for arrays.
+\
+\ All of these event codes should be written to disk adding ^User_eventcode, like this:
+\ ^MyCustomEventCode = 1
+\ Set Z(Y)=BTIME-U+(^MyCustomEventCode+^User_eventcode)/^store;
+
+\ Output (some are also input from conditions file)
+
+\ Always keep this one!
+^StartWriteFArray = 0   \ .100
+^EndWriteFArray   = 10  \ .110
+
+^Trial_start = 1 \ .101
+^Trial_end = 11
+^Left_prime = 2
+^Right_prime = 3
+^Switch_short = 4
+^Switch_long = 5  \ .105
+
+^Short_is_left = 1
+^short_interval = 2
+^long_interval = 3
+^short_probability = 4
+^short_cv = 5
+^long_cv = 6
+^cv = 7
+^intertrial_interval = 8
+^LeftVImean = 9
+^RightVImean = 10
+^MatchingTrainingTesting = 11
+^Left_VI = 12
+^Right_VI = 13
+^short_food_probability = 14
+^long_food_probability = 15
+^short_food_amount = 16
+^long_food_amount = 17
+^MatchingTrainingTesting = 18
+
+
+^Task_Interval = 230
+^trialtype = 231
+^On_TaskFeeder = 234
+^Off_TaskFeeder = 235
+^Short_On_TaskFeeder = 236
+^Short_Off_TaskFeeder = 237
+^Short_On_HopperLight = 238
+^Short_Off_HopperLight = 239
+^Long_On_TaskFeeder = 240
+^Long_Off_TaskFeeder = 241
+^Long_On_HopperLight = 242
+^Long_Off_HopperLight = 243
+^On_HopperLight = 244
+^Off_HopperLight = 245
+^On_TaskFeeder = 246
+^Off_TaskFeeder = 247
+^ShortStart = 248
+^Short_nosepoke = 249
+^Long_nosepoke = 250
+^FoodsPerNight = 251
+^FoodsThisTrial = 252
+^Food_Probability = 253
+^Food_Amount = 254
+
+\**********************************************************************
+\*                   State Sets for Template                          *
+\**********************************************************************
+S.S.1, \ Initialize time
+
+    s1,
+        #Start : Set U = BTIME; ---> s2
+    s2,
+       0": ---> sx
+
+S.S.2, \ Write data to disk every 10 minutes if there are enough events to make it worth it
+    s1,
+        #Start : ---> s2
+    s2,
+        #z^write_data: Set Z(Y) = -987.987;        \ "seals" the array so that the trailing zeros don't show up in the data file
+                       copyarray Z, A, ^Buffer;
+                       zeroarray Z;
+                       Set Y = 0;
+                       FLUSH ---> s2
+        #K^write_data: z^write_data; ---> s2
+        0": If (Y >= (^Buffer-200)) [@write, @next]
+            @write: z^write_data; ---> s2
+            @next: ---> s2
+
+S.S.3,
+    s1,
+       #Z^On_Close_Session ! #K99 : Off 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;   \ turn off all outputs
+                                    Set Z(Y)=BTIME-U+(^On_Close_Session+^Zpulse_eventcode)/^store;
+                                    z^ShowData; ---> s2
+    s2,
+       0": Add Y;
+           Set Z(Y) = -987.987;
+           copyarray Z, A, ^Buffer; ---> STOPABORTFLUSH
+
+
+\**********************************************************************
+\*                       Record Event Codes                           *
+\**********************************************************************
+\ All event codes are written to the Z array in the following state sets.
+\ Three state sets are reserved at the end for the experimenter.
+\ The state sets are set up under the assumption that the events within that state set will never occur at the same time.
+\ This is important because if this were not true, then only the first of the simultaneous events will be recorded.
+
+S.S.4, \ Nosepokes (only one can be true at a time)
+    s1,
+        #R^Left_Nosepoke: Set Z(Y) = BTIME-U + (^Left_Nosepoke+^input_on)/^store;
+                          Add Y, B(^Left_Nosepoke+^input_on);
+                          Set W(^Left_Nosepoke) = 1; ---> s2
+
+        #R^Middle_Nosepoke: Set Z(Y) = BTIME-U + (^Middle_Nosepoke+^input_on)/^store;
+                            Add Y, B(^Middle_Nosepoke+^input_on);
+                            Set W(^Middle_Nosepoke) = 1; ---> s3
+
+        #R^Right_Nosepoke: Set Z(Y) = BTIME-U + (^Right_Nosepoke+^input_on)/^store;
+                           Add Y, B(^Right_Nosepoke+^input_on);
+                           Set W(^Right_Nosepoke) = 1; ---> s4
+    s2,
+        #R^Left_Nosepoke: Set W(^Left_Nosepoke) = 2; ---> sx
+
+        0": Set Z(Y) = BTIME-U + (^Left_Nosepoke+^input_off)/^store;
+            Add Y, B(^Left_Nosepoke+^input_off);
+            Set W(^Left_Nosepoke) = 0; ---> s1
+    s3,
+        #R^Middle_Nosepoke: Set W(^Middle_Nosepoke) = 2; ---> sx
+
+        0": Set Z(Y) = BTIME-U + (^Middle_Nosepoke+^input_off)/^store;
+            Add Y, B(^Middle_Nosepoke+^input_off);
+            Set W(^Middle_Nosepoke) = 0; ---> s1
+    s4,
+        #R^Right_Nosepoke: Set W(^Right_Nosepoke) = 2; ---> sx
+
+        0": Set Z(Y) = BTIME-U + (^Right_Nosepoke+^input_off)/^store;
+            Add Y, B(^Right_Nosepoke+^input_off);
+            Set W(^Right_Nosepoke) = 0; ---> s1
+
+S.S.5,
+    s1,
+        #R^Left_Pellet: Set Z(Y) = BTIME-U + (^Left_Pellet+^input_on)/^store;
+                        Add Y, B(^Left_Pellet+^input_on);
+                        Set W(^Left_Pellet) = 1; ---> s2
+    s2,
+        #R^Left_Pellet: Set W(^Left_Pellet) = 2; ---> sx
+
+        0": Set Z(Y) = BTIME-U + (^Left_Pellet+^input_off)/^store;
+            Add Y, B(^Left_Pellet+^input_off);
+            Set W(^Left_Pellet) = 0; ---> s1
+
+S.S.6,
+    s1,
+        #R^Middle_Pellet: Set Z(Y) = BTIME-U + (^Middle_Pellet+^input_on)/^store;
+                          Add Y, B(^Middle_Pellet+^input_on);
+                          Set W(^Middle_Pellet) = 1; ---> s2
+    s2,
+        #R^Middle_Pellet: Set W(^Middle_Pellet) = 2; ---> sx
+
+        0": Set Z(Y) = BTIME-U + (^Middle_Pellet+^input_off)/^store;
+            Add Y, B(^Middle_Pellet+^input_off);
+            Set W(^Middle_Pellet) = 0; ---> s1
+
+S.S.7,
+    s1,
+        #R^Right_Pellet: Set Z(Y) = BTIME-U + (^Right_Pellet+^input_on)/^store;
+                         Add Y, B(^Right_Pellet+^input_on);
+                         Set W(^Right_Pellet) = 1; ---> s2
+    s2,
+        #R^Right_Pellet: Set W(^Right_Pellet) = 2; ---> sx
+
+        0": Set Z(Y) = BTIME-U + (^Right_Pellet+^input_off)/^store;
+            Add Y, B(^Right_Pellet+^input_off);
+            Set W(^Right_Pellet) = 0; ---> s1
+
+S.S.8, \ Left hopper light
+    s1,
+        #Z^On_Left_HopperLight: On ^Left_HopperLight;
+                                Set Z(Y)=BTIME-U+(^Left_HopperLight+^output_on)/^store;
+                                Add Y, B(^Left_HopperLight+^output_on);  --->sx
+
+        #Z^Off_Left_HopperLight: Off ^Left_HopperLight;
+                                 Set Z(Y)=BTIME-U+(^Left_HopperLight+^output_off)/^store;
+                                 Add Y, B(^Left_HopperLight+^output_off); --->sx
+S.S.9, \ Middle hopper light
+    s1,
+        #Z^On_Middle_HopperLight: On ^Middle_HopperLight;
+                                  Set Z(Y)=BTIME-U+(^Middle_HopperLight+^output_on)/^store;
+                                  Add Y, B(^Middle_HopperLight+^output_on);  --->sx
+
+        #Z^Off_Middle_HopperLight: Off ^Middle_HopperLight;
+                                   Set Z(Y)=BTIME-U+(^Middle_HopperLight+^output_off)/^store;
+                                   Add Y, B(^Middle_HopperLight+^output_off); --->sx
+S.S.10, \ Right hopper light
+    s1,
+        #Z^On_Right_HopperLight: On ^Right_HopperLight;
+                                 Set Z(Y)=BTIME-U+(^Right_HopperLight+^output_on)/^store;
+                                 Add Y, B(^Right_HopperLight+^output_on);  --->sx
+
+        #Z^Off_Right_HopperLight: Off ^Right_HopperLight;
+                                  Set Z(Y)=BTIME-U+(^Right_HopperLight+^output_off)/^store;
+                                  Add Y, B(^Right_HopperLight+^output_off); --->sx
+S.S.11, \ House light
+    s1,
+        #Z^On_HouseLight: On ^HouseLight;
+                          Set Z(Y)=BTIME-U+(^HouseLight+^output_on)/^store;
+                          Add Y, B(^HouseLight+^output_on);  --->sx
+
+        #Z^Off_HouseLight: Off ^HouseLight;
+                           Set Z(Y)=BTIME-U+(^HouseLight+^output_off)/^store;
+                           Add Y, B(^HouseLight+^output_off); --->sx
+S.S.12, \ Tone
+    s1,
+
+        #Z^On_Tone: On ^Tone;
+                    Set Z(Y)=BTIME-U+(^Tone+^output_on)/^store;
+                    Add Y, B(^Tone+^output_on);   --->sx
+
+        #Z^Off_Tone: Off ^Tone;
+                     Set Z(Y)=BTIME-U+(^Tone+^output_off)/^store;
+                     Add Y, B(^Tone+^output_off);  --->sx
+
+S.S.13, \ Left Pellet Delivery
+    s1,
+        #Z^On_Left_Feeder: On ^Left_Feeder;
+                           Set Z(Y)=BTIME-U+(^Left_Feeder+^output_on)/^store;
+                           Add Y, B(^Left_Feeder+^output_on); --->sx
+
+        #Z^Off_Left_Feeder: Off ^Left_Feeder;
+                            Set Z(Y)=BTIME-U+(^Left_Feeder+^output_off)/^store;
+                            Add Y, B(^Left_Feeder+^output_off); --->sx
+
+S.S.14, \ Right Pellet Delivery
+    s1,
+        #Z^On_Right_Feeder: On ^Right_Feeder;
+                            Set Z(Y)=BTIME-U+(^Right_Feeder+^output_on)/^store;
+                            Add Y, B(^Right_Feeder+^output_on); --->sx
+
+        #Z^Off_Right_Feeder: Off ^Right_Feeder;
+                             Set Z(Y)=BTIME-U+(^Right_Feeder+^output_off)/^store;
+                             Add Y, B(^Right_Feeder+^output_off); --->sx
+
+\\ NOTE(David): New logic for the day/night cycle (assumes the night is at night!)
+\\              First, assume the night is at night. Day is during the day.
+\\              this means that the On_Daytime < Off_Daytime, and that all we need
+\\              to do is check that secstoday > On_Daytime and < Off_Daytime.
+S.S.15,
+    S1, \ Set the last day state to basically null so that it has to either turn on or off the light.
+    0": Set D(^Last_DayState) = -1; ---> S2
+
+    S2,
+    0": If ((D(^On_Daytime) <= secstoday) and (secstoday < D(^Off_Daytime))) [@on, @off]
+             @on: Set D(^DayState) = 1; ---> S3
+             @off: Set D(^DayState) = 0; ---> S3
+
+    S3, \ check to see if the day state changed
+    0": If (D(^DayState) = D(^Last_DayState)) [@nochange, @change]
+             @nochange: Set D(^Last_DayState) = D(^DayState); ---> S2
+             @change: Set D(^Last_DayState) = D(^DayState); ---> S4
+
+    S4, \ If so, turn on/off the light, and go back to checking
+             \ Importantly reset the clock at dusk.
+      0": If (D(^DayState) = 1) [@on, @off]
+             @on: z^On_HouseLight;
+                  Set Z(Y)=BTIME-U+(^On_Daytime+^Datetime_eventcode)/^store;
+                  Add Y, B(^On_Daytime+^Datetime_eventcode);
+                  z^write_data; ---> S2
+             @off: z^Off_HouseLight;
+                   Set Z(Y)=BTIME-U+(^Off_Daytime+^Datetime_eventcode)/^store;
+                   Add Y, B(^Off_Daytime+^Datetime_eventcode);
+                   Set U = BTIME; \ Reset the clock at dusk
+                   Set Z(Y)=BTIME-U+(^Reset_Clock+^Datetime_eventcode)/^store;
+                   Add Y, B(^Reset_Clock+^Datetime_eventcode);
+                   z^write_data; ---> S2
+
+S.S.16, \ Feeding periods
+        \ Assume feeding periods do not straddle midnight!
+
+   S1,
+    0": Set D(^Last_Feeding_period) = D(^Feeding_period);
+        If ((D(^On_FeedingPeriod1) <= secstoday) and (secstoday < D(^Off_FeedingPeriod1))) [@in1, @not]
+            @in1: Set D(^Feeding_period) = 1; ---> S2
+        @not: If ((D(^On_FeedingPeriod2) <= secstoday) and (secstoday < D(^Off_FeedingPeriod2))) [@in2, @not]
+            @in2: Set D(^Feeding_period) = 2; ---> S2
+        @not: If ((D(^On_FeedingPeriod3) <= secstoday) and (secstoday < D(^Off_FeedingPeriod3))) [@in3, @not]
+            @in3: Set D(^Feeding_period) = 3; ---> S2
+
+        \\ Now check to see if we're in a feeding period that straddles midnight
+        @not: If ((D(^On_FeedingPeriod1) > D(^Off_FeedingPeriod1)) and (((D(^On_FeedingPeriod1) <= secstoday) and (secstoday <= 86400)) or ((0 <= secstoday) and (secstoday < D(^Off_Feedingperiod1))))) [@in1, @not]
+            @in1: Set D(^Feeding_period) = 1; ---> S2
+        @not: If ((D(^On_FeedingPeriod2) > D(^Off_FeedingPeriod2)) and (((D(^On_FeedingPeriod2) <= secstoday) and (secstoday <= 86400)) or ((0 <= secstoday) and (secstoday < D(^Off_Feedingperiod2))))) [@in2, @not]
+            @in2: Set D(^Feeding_period) = 2; ---> S2
+        @not: If ((D(^On_FeedingPeriod3) > D(^Off_FeedingPeriod3)) and (((D(^On_FeedingPeriod3) <= secstoday) and (secstoday <= 86400)) or ((0 <= secstoday) and (secstoday < D(^Off_Feedingperiod3))))) [@in3, @not]
+            @in3: Set D(^Feeding_period) = 3; ---> S2
+
+        \\ Otherwise we're not in one...
+        @not: Set D(^Feeding_period) = 0; ---> S2
+
+   S2,
+    0": If (D(^Feeding_period) = D(^Last_Feeding_period)) [@no, @change]
+           @no: ---> S1
+           @change: If (D(^Feeding_period) = 1) [@in1, @not]
+                       @in1: Set Z(Y)=BTIME-U+(^On_FeedingPeriod1+^Datetime_eventcode)/^store;
+                             Add Y, B(^On_FeedingPeriod1+^Datetime_eventcode); ---> S1
+                    @not: If (D(^Feeding_period) = 2) [@in1, @not]
+                             @in1: Set Z(Y)=BTIME-U+(^On_FeedingPeriod2+^Datetime_eventcode)/^store;
+                                   Add Y, B(^On_FeedingPeriod2+^Datetime_eventcode); ---> S1
+                    @not: If (D(^Feeding_period) = 3) [@in1, @not]
+                             @in1: Set Z(Y)=BTIME-U+(^On_FeedingPeriod3+^Datetime_eventcode)/^store;
+                                   Add Y, B(^On_FeedingPeriod3+^Datetime_eventcode); ---> S1
+                    @not: If ((D(^Feeding_period) = 0) and (D(^Last_Feeding_period) = 1)) [@out1, @not]
+                             @in1: Set Z(Y)=BTIME-U+(^Off_FeedingPeriod1+^Datetime_eventcode)/^store;
+                                   Add Y, B(^Off_FeedingPeriod1+^Datetime_eventcode); ---> S1
+                    @not: If ((D(^Feeding_period) = 0) and (D(^Last_Feeding_period) = 2)) [@out2, @not]
+                             @in1: Set Z(Y)=BTIME-U+(^Off_FeedingPeriod2+^Datetime_eventcode)/^store;
+                                   Add Y, B(^Off_FeedingPeriod2+^Datetime_eventcode); ---> S1
+                    @not: If ((D(^Feeding_period) = 0) and (D(^Last_Feeding_period) = 3)) [@out3, @not]
+                             @in1: Set Z(Y)=BTIME-U+(^Off_FeedingPeriod3+^Datetime_eventcode)/^store;
+                                   Add Y, B(^Off_FeedingPeriod3+^Datetime_eventcode); ---> S1
+                    @not: ---> S1
+
+S.S.17, \ Record weighing periods
+    S1,
+       #K^On_weight: Set Z(Y)=BTIME-U+(^On_Weight+^Kpulse_eventcode)/^store;
+                     Add Y, B(^On_Weight+^Kpulse_eventcode); ---> S2
+    S2,
+       #K^Off_weight: Set Z(Y)=BTIME-U+(^Off_Weight+^Kpulse_eventcode)/^store;
+                      Add Y, B(^Off_Weight+^Kpulse_eventcode); ---> S1
+
+S.S.19, \ Write schedules to file at the feeding period boundaries
+    S1,
+     #Start: ---> S2
+    S2,
+     0.2": If (D(^Feeding_period) > 0) [@justentered, @stillwaiting]
+            @justentered: z^write_variables; ---> S3
+            @stillwaiting: ---> S2
+    S3,
+     0": If (D(^Feeding_period) > 0) [@stillwaiting, @justended]
+            @stillwaiting: ---> S3
+            @justended: z^write_data; ---> S2
+
+S.S.20, \ Show data
+    s1,
+        #z^ShowData ! 1": SHOW 1, FoodsLastNight, D(^Daily_Food_Amount);
+                          SHOW 2, FoodAmount, 0.02*D(^Daily_Food_Amount);
+                          SHOW 3, PhaseLongTrials, D(^Long_Trial_Count);---> S1
+
+\ Keep track of the number of foods in a day
+S.S.21,
+  S1,
+   0": If (D(^DayState) = 1) [@daytime, @nighttime]
+      @daytime: ---> S1
+      @nighttime: Set D(^Daily_Food_Amount) = 0; ---> S2
+  S2,
+   #z^On_Left_Feeder: Add D(^Daily_Food_Amount); ---> S2
+   #z^On_Right_Feeder: Add D(^Daily_Food_Amount); ---> S2
+   0": If (D(^DayState) = 1) [@daytime, @nighttime]
+      @daytime: ---> S1
+      @nighttime: ---> S2
+
+S.S.22,
+    S1,
+    #z^write_variables: Set Z(Y)=BTIME-U+(^StartWriteFArray+^User_eventcode)/^store; Add Y, B(^StartWriteFArray+^User_eventcode);
+                        Set Z(Y)=secstoday; Add Y;
+                        Set Z(Y)=O(0); Add Y;
+                        Set Z(Y)=O(1); Add Y;
+                        Set Z(Y)=O(2); Add Y;
+                        Set Z(Y)=O(3); Add Y;
+                        Set Z(Y)=O(4); Add Y;
+                        Set Z(Y)=O(5); Add Y;
+                        Set Z(Y)=O(6); Add Y;
+                        Set Z(Y)=O(7); Add Y;
+                        Set Z(Y)=O(8); Add Y;
+                        Set Z(Y)=O(9); Add Y;
+                        Set Z(Y)=O(10); Add Y;
+                        Set Z(Y)=O(11); Add Y;
+                        Set Z(Y)=O(12); Add Y;
+                        Set Z(Y)=O(13); Add Y;
+                        Set Z(Y)=O(14); Add Y;
+                        Set Z(Y)=O(15); Add Y;
+                        Set Z(Y)=O(16); Add Y;
+                        Set Z(Y)=O(17); Add Y;
+                        Set Z(Y)=O(18); Add Y;
+                        Set Z(Y)=O(19); Add Y;
+                        Set Z(Y)=O(20); Add Y;
+                        Set Z(Y)=BTIME-U+(^EndWriteFArray+^User_eventcode)/^store; Add Y, B(^EndWriteFArray+^User_eventcode); ---> S1
+S.S.23, \ Read and write experimental variables.
+
+   S1, \ Initialize parameter values
+
+0": SET O(0) = 28800;    \ on daytime
+    SET O(1) = 72000;    \ off daytime
+    SET O(2) = 72000;    \ on feeding period
+    SET O(3) = 28800;    \ off feeding period
+    SET O(4) = 1;        \ short is left
+    SET O(5) = 3;        \ short interval
+    SET O(6) = 9;        \ long interval
+    SET O(7) = 0.5;      \ short trial probability
+    SET O(8) = 45;       \ intertrial interval
+    SET O(9) = 0;        \ short cv
+    SET O(10) = 0;       \ long cv
+    SET O(11) = 240;     \ left VI mean
+    SET O(12) = 240;     \ right VI mean
+    SET O(13) = 1;       \ short food probability
+    SET O(14) = 1;       \ long food probability
+    SET O(15) = 1;       \ short food amount
+    SET O(16) = 1;       \ long food amount
+    SET O(17) = 0;       \ matching, training, testing (0, 1, 2)
+    SET O(18) = -876.876; ---> S1  
+
+   S2, \Read text file specifying parameter values
+     0": BKGRND 2 --->S3
+
+   S3,
+     0": IF J > 0 []--->S4
+
+    S4,
+      0": IF J > 1 [@true,@false]
+            @true: z^write_variables;
+                   SET J=0--->S5
+            @false: SET J=0 --->S5
+
+    S5,
+      30":--->S2
+
+S.S.24,
+    S1,
+     0": Set D(^On_Daytime) = O(0);
+         Set D(^Off_Daytime) = O(1);
+         Set D(^On_FeedingPeriod1) = O(2);
+         Set D(^Off_FeedingPeriod1) = O(3);
+         Set F(^Short_is_left) = O(4);
+         Set F(^short_interval) = O(5);
+         Set F(^long_interval) = O(6);
+         Set F(^short_probability) = O(7);
+         Set F(^intertrial_interval) = O(8);
+         Set F(^short_cv) = O(9);
+         Set F(^long_cv) = O(10);
+         Set F(^LeftVImean) = O(11);
+         Set F(^RightVImean) = O(12);
+         Set F(^short_food_probability) = O(13);
+         Set F(^long_food_probability) = O(14);
+         Set F(^short_food_amount) = O(15);
+         Set F(^long_food_amount) = O(16);
+         Set F(^MatchingTrainingTesting) = O(17); ---> S1
+
+
+\**********************************************************************
+\*   Protocol (state sets 19 - 32)
+\**********************************************************************
+\
+\ Just a friendly reminder to write two events that could occur simultaneous in two different state sets
+\ If you do not (and this is important): Only the first event in the state set will be written to the disk!
+\
+
+\\ ------------------------------------------------
+\\ Matching protocol below ------------------------
+\\ ------------------------------------------------
+S.S.25, \ Left VI
+  S1,
+    #Start: ---> S2
+  S2,
+    0": If ((F(^MatchingTrainingTesting) = 0) and (D(^Feeding_period) > 0)) [@stay, @next]
+           @stay: Set T = F(^LeftVImean);
+                  ~T:=(LN(random)*-T);~;
+                  Set F(^Left_VI) = T * 1"; ---> S3
+           @next: ---> s2
+  S3,
+   F(^Left_VI)#T: If ((F(^MatchingTrainingTesting) <> 0) or (D(^Feeding_period) = 0)) [@back, @next]
+                     @back: ---> S2
+                     @next: Set Z(Y)=BTIME-U+(^Left_prime+^User_eventcode)/^store; Add Y --->s4
+  S4,
+   #R^Left_Nosepoke: z^On_Left_Feeder; Add F(^FoodsPerNight); ---> S5
+   0": If ((F(^MatchingTrainingTesting) <> 0) or (D(^Feeding_period) = 0))  [@back, @stay]
+         @back: ---> S2
+         @stay: ---> S4
+  S5,
+   0.2": z^Off_Left_Feeder; ---> S2
+
+S.S.26, \ Right VI
+  S1,
+    #Start: ---> S2
+  S2,
+    0": If ((F(^MatchingTrainingTesting) = 0) and (D(^Feeding_period) > 0)) [@stay, @next]
+           @stay: Set T = F(^RightVImean);
+                  ~T:=(LN(random)*-T);~;
+                  Set F(^Right_VI) = T * 1"; ---> S3
+           @next: ---> s2
+  S3,
+   F(^Right_VI)#T:  If ((F(^MatchingTrainingTesting) <> 0) or (D(^Feeding_period) = 0)) [@back, @next]
+                     @back: ---> S2
+                     @next: Set Z(Y)=BTIME-U+(^Right_prime+^User_eventcode)/^store; Add Y; --->s4
+  S4,
+   #R^Right_Nosepoke: z^On_Right_Feeder; Add F(^FoodsPerNight); ---> S5
+   0": If ((F(^MatchingTrainingTesting) <> 0) or (D(^Feeding_period) = 0)) [@back, @stay]
+         @back: ---> S2
+         @stay: ---> S4
+  S5,
+   0.2": z^Off_Right_Feeder; ---> S2
+
+\\ ------------------------------------------------
+\\ Switch protocols below -------------------------
+\\ ------------------------------------------------
+S.S.27,
+    S1,
+      0": If F(^Short_is_left) = 1 [@left, @right]
+            @left: Set F(^Short_nosepoke) = ^Left_Nosepoke;
+		           Set F(^Long_nosepoke) = ^Right_Nosepoke;
+                   Set F(^Short_On_TaskFeeder) = ^On_Left_Feeder;
+                   Set F(^Short_Off_TaskFeeder) = ^Off_Left_Feeder;
+                   Set F(^Long_On_TaskFeeder) = ^On_Right_Feeder;
+                   Set F(^Long_Off_TaskFeeder) = ^Off_Right_Feeder; ---> s1
+
+             @right: Set F(^Short_nosepoke) = ^Right_Nosepoke;
+		             Set F(^Long_nosepoke) = ^Left_Nosepoke;
+                     Set F(^Short_On_TaskFeeder) = ^On_Right_Feeder;
+                     Set F(^Short_Off_TaskFeeder) = ^Off_Right_Feeder;
+                     Set F(^Long_On_TaskFeeder) = ^On_Left_Feeder;
+                     Set F(^Long_Off_TaskFeeder) = ^Off_Left_Feeder; ---> s1
+
+S.S.28,
+    S1,
+     #Start:--->S2
+
+    S2,
+     0": If ((F(^MatchingTrainingTesting) > 0) and (D(^Feeding_period) > 0)) [@runtask, @wait]
+            @runtask: ---> S3
+            @wait: ---> s2
+
+    S3,
+     0": Set Z(Y)=BTIME-U+(^Trial_start+^User_eventcode)/^store; Add Y;
+         z^On_Middle_HopperLight; ---> S4
+
+    S4,
+     #R^Middle_NosePoke: z^Off_Middle_HopperLight; --->S5
+     0": If ((F(^MatchingTrainingTesting) > 0) and (D(^Feeding_period) > 0)) [@runtask, @wait]
+            @runtask: ---> S4
+            @wait: z^Off_Middle_HopperLight; ---> s2
+
+    S5,
+     0": Set F(^FoodsThisTrial) = 0;
+         ~X:=(random);~;
+         If (X <= F(^short_probability)) [@Short, @Long]
+            @Short: Set F(^trialtype)= ^Switch_short;
+                    Set F(^Task_interval) = F(^short_interval);
+                    Set F(^cv) = F(^short_cv);
+                    Set F(^On_TaskFeeder) = F(^Short_On_TaskFeeder);
+                    Set F(^Off_TaskFeeder) = F(^Short_Off_TaskFeeder);
+                    Set F(^Food_Probability) = F(^short_food_probability);
+                    Set F(^Food_Amount) = F(^short_food_probability);
+                    Set Z(Y)=BTIME-U+(^Switch_short+^User_eventcode)/^store; Add Y; ---> S6
+
+            @Long: Set F(^trialtype)= ^Switch_long;
+                   Set F(^Task_interval) = F(^long_interval);
+                   Set F(^cv) = F(^long_cv);
+                   Set F(^On_TaskFeeder) = F(^Long_On_TaskFeeder);
+                   Set F(^Off_TaskFeeder) = F(^Long_Off_TaskFeeder);
+                   Set F(^Food_Probability) = F(^long_food_probability);
+                   Set F(^Food_Amount) = F(^long_food_probability);
+                   Set Z(Y)=BTIME-U+(^Switch_long+^User_eventcode)/^store; Add Y; ---> S6
+   S6,
+     0": ~random_normal(MG, R);~;
+         Set F(^Task_interval) = F(^Task_interval) + R*(F(^cv)*F(^Task_interval));
+         Set F(^Task_interval) = F(^Task_interval) * 1";
+         Set F(^ShortStart) = 0; ---> S7
+
+    \\ -----------
+    \\ The instrumental task logic starts here.
+    S7,
+
+     \\ As soon as the interval elapses, move on
+     F(^Task_interval)#T: If (F(^MatchingTrainingTesting) = 1) [@training, @testing]
+            @training: ---> S9
+            @testing: ---> S8
+
+     \\ The logic below is only true for the testing (not training).
+     \\ [1] they first have to poke in the short side, so check for that;
+     \\ [2] if they poke in the long side without first poking in the short, end the task early
+     #RF(^Short_nosepoke): Set F(^ShortStart) = 1 ---> SX
+     #RF(^Long_nosepoke): If ((F(^ShortStart) = 1) and (F(^MatchingTrainingTesting) = 2)) [@True, @False]
+               @True:---> Sx
+               @False:---> S12
+
+    \ Below, if they were poking on the short, and continue to poke after time-elapsed on the long,
+    \   we reset F(ShortStart) back to zero so that when they do finally poke in the long, it's an error.
+    S8,
+     #RF(^Short_nosepoke): If F(^trialtype)= ^Switch_short [@correct, @incorrect]
+                @Correct: ---> S9
+                @Incorrect: Set F(^ShortStart) = 0; ---> Sx
+
+     #RF(^Long_nosepoke): If (F(^trialtype) = ^Switch_long) and (F(^ShortStart) = 1) [@correct, @incorrect]
+                @Correct: Add D(^Long_Trial_Count); ---> S9
+                @Incorrect:---> S12
+
+     0": If ((F(^MatchingTrainingTesting) > 0) and (D(^Feeding_period) > 0)) [@runtask, @notask]
+            @runtask: ---> S8
+            @notask: Set Z(Y)=BTIME-U+(^Trial_end+^User_eventcode)/^store; Add Y; ---> S12
+
+    S9,
+     0": ~X:=(random);~;
+         If (X <= F(^food_probability)) [@feed, @nofeed]
+            @feed: ---> S10
+            @nofeed: ---> S12
+
+    S10,
+     0": zF(^On_TaskFeeder);
+         Add F(^FoodsPerNight); ---> S11
+
+    S11,
+     0.1": zF(^Off_TaskFeeder);
+           Add F(^FoodsThisTrial);
+           IF (F(^FoodsThisTrial) < F(^food_amount)) [@feedmore, @stop]
+               @feedmore: ---> S10
+               @stop: ---> S12
+
+    S12,
+     0": Set Z(Y)=BTIME-U+(^Trial_end+^User_eventcode)/^store; Add Y;
+         Set R = F(^intertrial_interval);
+         ~R:=(-R*LN(random));~;
+         Set R = R*1" ---> S13
+
+    S13,
+     F(^intertrial_interval)#T: ---> S2
+
+\How many Long_Trials are in this phase? 
+\This is a bad hack way it should really be: when phase != last phase, ^Long_Trial_Count = 0
+S.S.29,
+  S1,
+   0": If (D(^Long_Trial_Count < 800) [@count, @reset]
+      @count: ---> S1
+      @reset: Set D(^Long_Trial_Count) = 0; ---> S1
+
+\Here's how it should look... sort of... !!! THERE IS NO LAG COMMAND in MedPC !!!
+  \S1,   \will this help the loop some?
+    \0": If (D(^Feeding_period) > 0)) [@continue, @wait]
+      \@continue: ---> S2
+      \@wait: --->S1
+  
+  \S2,
+    \0": If (F(^short_food_probability) != lag(F(^short_food_probability))) [@reset, @count]
+   \   @reset: Set D(^Long_Trial_Count) = 0; ---> S1 /will this be a problamatic loop?
+    \  @count: ---> S3
+    
+  \S3, 
+    \0": If (F(^long_food_probability) != lag(F(^long_food_probability))) [@reset, @count]
+   \   @reset: Set D(^Long_Trial_Count) = 0; ---> S1
+    \  @count: ---> S4
+    
+  \S4,
+     \0": If (F(^short_food_amount) != lag(F(^short_food_amount))) [@reset, @count]
+   \   @reset: Set D(^Long_Trial_Count) = 0; ---> S1
+    \  @count: ---> S5
+  
+   \S5,
+     \0": If (F(^long_food_amount) != lag(F(^long_food_amount))) [@reset, @count]
+   \   @reset: Set D(^Long_Trial_Count) = 0; ---> S1
+    \  @count: ---> S1
+
+
